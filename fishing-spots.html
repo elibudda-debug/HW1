@@ -1,0 +1,716 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>יומן נקודות דיג</title>
+<meta name="description" content="ניהול נקודות ציון לדיג על מפה אינטראקטיבית – שמירה מקומית בדפדפן.">
+<meta name="theme-color" content="#0a2540">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230a6fb8'/%3E%3Cpath d='M6 16c4-6 12-6 16 0-4 6-12 6-16 0z' fill='%23fff'/%3E%3Cpath d='M22 16l5-4v8z' fill='%23fff'/%3E%3Ccircle cx='11' cy='15' r='1.4' fill='%230a6fb8'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+:root{
+  --bg:#f3f6fa; --surface:#fff; --surface-2:#eef3f8; --text:#0b1f33; --muted:#5b6c7e; --border:#dbe4ee;
+  --accent:#0a6fb8; --accent-h:#0960a0; --accent-soft:rgba(10,111,184,.1);
+  --ok:#12a150; --err:#d64545; --warn:#d48806;
+  --shadow:0 1px 2px rgba(11,31,51,.06),0 8px 24px rgba(11,31,51,.08);
+  --radius:14px; color-scheme:light;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#06121f; --surface:#0c1d30; --surface-2:#12283f; --text:#e6eef6; --muted:#8ea3b8; --border:#1d3550;
+    --accent:#4cb3ff; --accent-h:#79c6ff; --accent-soft:rgba(76,179,255,.13);
+    --ok:#34d399; --err:#f87171; --warn:#fbbf24; --shadow:0 1px 2px rgba(0,0,0,.3),0 8px 28px rgba(0,0,0,.3); color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#06121f; --surface:#0c1d30; --surface-2:#12283f; --text:#e6eef6; --muted:#8ea3b8; --border:#1d3550;
+  --accent:#4cb3ff; --accent-h:#79c6ff; --accent-soft:rgba(76,179,255,.13);
+  --ok:#34d399; --err:#f87171; --warn:#fbbf24; --shadow:0 1px 2px rgba(0,0,0,.3),0 8px 28px rgba(0,0,0,.3); color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--text);font:15px/1.5 Heebo,system-ui,-apple-system,"Segoe UI",Arial,sans-serif;-webkit-font-smoothing:antialiased;display:flex;flex-direction:column;overflow:hidden}
+button,input,select,textarea{font:inherit;color:inherit}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+
+/* Header */
+header{flex:none;background:#0a2540;color:#fff;display:flex;align-items:center;gap:12px;padding:10px 16px;padding-top:max(10px,env(safe-area-inset-top));z-index:1100}
+.brand{display:flex;align-items:center;gap:10px;font-weight:800;font-size:19px;white-space:nowrap}
+.brand small{display:block;font-weight:400;font-size:12px;color:#9fb8cf}
+.h-actions{margin-inline-start:auto;display:flex;gap:6px;align-items:center}
+.hbtn{border:0;background:rgba(255,255,255,.1);color:#fff;border-radius:10px;height:38px;padding:0 12px;display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-weight:600;font-size:14px}
+.hbtn:hover{background:rgba(255,255,255,.18)}
+.hbtn svg{flex:none}
+@media (max-width:700px){.hbtn .t{display:none}.hbtn{width:38px;padding:0;justify-content:center}.brand small{display:none}}
+
+/* Layout */
+.app{flex:1;display:grid;grid-template-columns:380px 1fr;min-height:0}
+aside{background:var(--surface);border-inline-end:1px solid var(--border);display:flex;flex-direction:column;min-height:0;min-width:0}
+.map-wrap{position:relative;min-width:0;min-height:0}
+#map{position:absolute;inset:0;background:var(--surface-2)}
+.tools{padding:14px 14px 10px;border-bottom:1px solid var(--border);display:grid;gap:8px}
+.search{position:relative}
+.search svg{position:absolute;inset-inline-start:12px;top:50%;transform:translateY(-50%);color:var(--muted);pointer-events:none}
+.search input{width:100%;padding:10px 40px 10px 12px;border-radius:10px;border:1px solid var(--border);background:var(--surface-2);outline:0}
+.search input:focus,.tools select:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.tools select{width:100%;padding:9px 10px;border-radius:10px;border:1px solid var(--border);background:var(--surface-2);outline:0}
+.chips{display:flex;gap:6px;overflow-x:auto;padding-bottom:2px;scrollbar-width:none}
+.chips::-webkit-scrollbar{display:none}
+.chip{flex:none;border:1px solid var(--border);background:var(--surface);border-radius:999px;padding:4px 11px;font-size:13px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:6px;color:var(--muted)}
+.chip i{width:9px;height:9px;border-radius:50%;display:inline-block}
+.chip.on{background:var(--text);color:var(--bg);border-color:var(--text)}
+.count{font-size:13px;color:var(--muted);display:flex;justify-content:space-between;align-items:center}
+.list{flex:1;overflow-y:auto;padding:10px 12px 90px;display:flex;flex-direction:column;gap:10px}
+.spot{display:grid;grid-template-columns:64px 1fr;gap:12px;padding:10px;border:1px solid var(--border);border-radius:12px;background:var(--surface);cursor:pointer;transition:border-color .15s, box-shadow .15s;text-align:start;width:100%}
+.spot:hover,.spot.sel{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.thumb{width:64px;height:64px;border-radius:10px;object-fit:cover;background:var(--surface-2);display:grid;place-items:center;color:var(--muted)}
+.spot h3{margin:0;font-size:16px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.meta{font-size:12.5px;color:var(--muted);display:flex;flex-wrap:wrap;gap:4px 10px;margin-top:3px}
+.tag{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:700;border-radius:999px;padding:1px 8px;color:#fff}
+.notes{font-size:13px;color:var(--muted);margin-top:4px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.spot-actions{display:flex;gap:6px;margin-top:8px}
+.mini{border:1px solid var(--border);background:var(--surface-2);border-radius:8px;padding:3px 10px;font-size:13px;font-weight:600;cursor:pointer}
+.mini:hover{border-color:var(--accent);color:var(--accent)}
+.mini.danger:hover{border-color:var(--err);color:var(--err)}
+.empty{text-align:center;color:var(--muted);padding:40px 16px}
+.empty svg{color:var(--accent);opacity:.7;margin-bottom:8px}
+.empty b{display:block;color:var(--text);font-size:17px;margin-bottom:4px}
+.storage{flex:none;padding:8px 14px;border-top:1px solid var(--border);font-size:12px;color:var(--muted);display:flex;align-items:center;gap:8px}
+.bar{flex:1;height:6px;border-radius:9px;background:var(--surface-2);overflow:hidden}
+.bar i{display:block;height:100%;background:var(--accent);width:0;transition:width .3s}
+
+/* Map overlays */
+.map-hint{position:absolute;top:12px;left:50%;transform:translateX(-50%);z-index:500;background:var(--surface);color:var(--text);border:1px solid var(--border);box-shadow:var(--shadow);border-radius:999px;padding:7px 16px;font-size:14px;font-weight:600;white-space:nowrap;pointer-events:none;max-width:calc(100% - 100px);overflow:hidden;text-overflow:ellipsis}
+.map-hint.pick{background:var(--accent);color:#fff;border-color:var(--accent)}
+.fab{position:absolute;bottom:22px;left:18px;z-index:600;border:0;background:var(--accent);color:#fff;border-radius:16px;height:54px;padding:0 20px;display:flex;align-items:center;gap:8px;font-weight:700;font-size:15px;cursor:pointer;box-shadow:0 10px 24px rgba(10,111,184,.4)}
+.fab:hover{background:var(--accent-h)}
+.leaflet-container{font:inherit}
+.leaflet-popup-content{margin:12px 14px;min-width:200px;direction:rtl;text-align:right}
+.leaflet-popup-content-wrapper,.leaflet-popup-tip{background:var(--surface);color:var(--text)}
+.pop h4{margin:0 0 4px;font-size:16px}
+.pop img{width:100%;max-height:150px;object-fit:cover;border-radius:8px;margin:6px 0}
+.pop p{margin:6px 0;font-size:13px;color:var(--muted);white-space:pre-wrap}
+.pop .spot-actions{flex-wrap:wrap}
+.pop a.mini{text-decoration:none;color:inherit}
+.pin{filter:drop-shadow(0 3px 4px rgba(0,0,0,.35))}
+.draft-pin{animation:bounce .9s ease-in-out infinite}
+@keyframes bounce{50%{transform:translateY(-6px)}}
+
+/* Mobile tabs */
+.tabbar{display:none}
+@media (max-width:860px){
+  .app{grid-template-columns:1fr;position:relative}
+  aside{position:absolute;inset:0;z-index:700;border:0;display:none}
+  .app.show-list aside{display:flex}
+  .tabbar{display:grid;grid-template-columns:1fr 1fr;flex:none;background:var(--surface);border-top:1px solid var(--border);padding-bottom:env(safe-area-inset-bottom);z-index:1000}
+  .tabbar button{border:0;background:none;padding:10px 0 9px;display:flex;flex-direction:column;align-items:center;gap:2px;font-size:12px;font-weight:600;color:var(--muted);cursor:pointer}
+  .tabbar button.on{color:var(--accent)}
+  .fab{bottom:16px;left:14px;height:50px;padding:0 16px}
+  .map-hint{font-size:13px;top:10px}
+}
+
+/* Dialog */
+dialog{border:0;border-radius:18px;padding:0;width:min(560px,calc(100% - 24px));max-height:calc(100% - 24px);background:var(--surface);color:var(--text);box-shadow:0 30px 80px rgba(0,0,0,.4)}
+dialog::backdrop{background:rgba(4,15,28,.55);backdrop-filter:blur(2px)}
+.dlg-head{display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--surface);z-index:2}
+.dlg-head h2{margin:0;font-size:19px}
+.x{border:0;background:var(--surface-2);width:34px;height:34px;border-radius:50%;cursor:pointer;display:grid;place-items:center}
+.dlg-body{padding:18px 20px;display:grid;gap:14px}
+.f label{display:block;font-weight:600;font-size:14px;margin-bottom:6px}
+.f label .req{color:var(--err)}
+.f input,.f select,.f textarea{width:100%;padding:10px 12px;border-radius:10px;border:1px solid var(--border);background:var(--surface-2);outline:0}
+.f input:focus,.f select:focus,.f textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.f textarea{min-height:84px;resize:vertical}
+.f.bad input,.f.bad select{border-color:var(--err)}
+.f .msg{display:none;color:var(--err);font-size:12.5px;margin-top:4px}
+.f.bad .msg{display:block}
+.f input[dir=ltr]{text-align:left}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media (max-width:480px){.g2{grid-template-columns:1fr}}
+.coord-tools{display:flex;gap:8px;flex-wrap:wrap;margin-top:-4px}
+.photo{border:2px dashed var(--border);border-radius:12px;padding:14px;text-align:center;cursor:pointer;color:var(--muted);transition:.15s;position:relative}
+.photo:hover,.photo.drag{border-color:var(--accent);background:var(--accent-soft)}
+.photo img{max-width:100%;max-height:200px;border-radius:8px;display:block;margin:0 auto}
+.photo input{position:absolute;inset:0;opacity:0;cursor:pointer}
+.photo-rm{margin-top:8px}
+.dlg-foot{display:flex;gap:10px;justify-content:flex-start;padding:14px 20px;border-top:1px solid var(--border);position:sticky;bottom:0;background:var(--surface)}
+.btn{border:0;border-radius:10px;padding:10px 18px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:6px}
+.btn-p{background:var(--accent);color:#fff}
+.btn-p:hover{background:var(--accent-h)}
+.btn-g{background:var(--surface-2);border:1px solid var(--border)}
+.btn-d{background:var(--err);color:#fff}
+.btn-s{padding:7px 12px;font-size:13px;font-weight:600}
+.confirm-body{padding:22px 20px 6px}
+.confirm-body p{margin:6px 0 0;color:var(--muted)}
+
+/* Toasts */
+.toasts{position:fixed;top:calc(70px + env(safe-area-inset-top));left:50%;transform:translateX(-50%);z-index:3000;display:flex;flex-direction:column;gap:8px;align-items:center;pointer-events:none;width:calc(100% - 24px);max-width:440px}
+.toast{pointer-events:auto;display:flex;align-items:center;gap:10px;background:var(--surface);color:var(--text);border:1px solid var(--border);border-inline-start:4px solid var(--accent);box-shadow:var(--shadow);border-radius:12px;padding:11px 14px;font-weight:500;width:100%;animation:tin .25s ease-out}
+.toast.ok{border-inline-start-color:var(--ok)}
+.toast.err{border-inline-start-color:var(--err)}
+.toast.warn{border-inline-start-color:var(--warn)}
+.toast.out{opacity:0;transform:translateY(-8px);transition:.25s}
+@keyframes tin{from{opacity:0;transform:translateY(-10px)}}
+@media (prefers-reduced-motion: reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <svg width="34" height="34" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="9" fill="#0a6fb8"/><path d="M6 16c4-6 12-6 16 0-4 6-12 6-16 0z" fill="#fff"/><path d="M22 16l5-4v8z" fill="#fff"/><circle cx="11" cy="15" r="1.4" fill="#0a6fb8"/></svg>
+    <div>יומן נקודות דיג<small>המקומות הטובים שלך, תמיד בכיס</small></div>
+  </div>
+  <div class="h-actions">
+    <button class="hbtn" id="btnCoords" title="הוספה לפי קואורדינטות"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="8"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></svg><span class="t">לפי קואורדינטות</span></button>
+    <button class="hbtn" id="btnLocate" title="המיקום שלי"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 11l18-8-8 18-2-8z"/></svg><span class="t">המיקום שלי</span></button>
+    <button class="hbtn" id="btnExport" title="גיבוי לקובץ"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12M7 10l5 5 5-5M4 21h16"/></svg><span class="t">גיבוי</span></button>
+    <button class="hbtn" id="btnImport" title="שחזור מקובץ"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 21V9M7 14l5-5 5 5M4 3h16"/></svg><span class="t">שחזור</span></button>
+    <button class="hbtn" id="btnTheme" title="מצב כהה / בהיר" aria-label="מצב כהה או בהיר"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg></button>
+    <input type="file" id="importFile" accept="application/json,.json" hidden>
+  </div>
+</header>
+
+<div class="app" id="app">
+  <aside aria-label="רשימת נקודות">
+    <div class="tools">
+      <div class="search">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        <input id="q" type="search" placeholder="חיפוש לפי שם או הערות…" aria-label="חיפוש">
+      </div>
+      <div class="row2">
+        <select id="fType" aria-label="סינון לפי סוג דיג"></select>
+        <select id="fSort" aria-label="מיון">
+          <option value="date">לפי תאריך</option>
+          <option value="name">לפי שם (א–ת)</option>
+          <option value="created">נוספו לאחרונה</option>
+        </select>
+      </div>
+      <div class="chips" id="chips"></div>
+      <div class="count"><span id="count"></span><button class="mini" id="btnFit" type="button">הצג הכל במפה</button></div>
+    </div>
+    <div class="list" id="list"></div>
+    <div class="storage" title="נפח האחסון בדפדפן"><span>אחסון</span><div class="bar"><i id="stBar"></i></div><span id="stTxt"></span></div>
+  </aside>
+
+  <div class="map-wrap">
+    <div id="map" dir="ltr"></div>
+    <div class="map-hint" id="hint">לחצו על המפה כדי להוסיף נקודת דיג</div>
+    <button class="fab" id="fab" type="button"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>נקודה חדשה</button>
+  </div>
+</div>
+
+<nav class="tabbar" id="tabbar">
+  <button class="on" data-view="map"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2z"/><path d="M9 4v14M15 6v14"/></svg>מפה</button>
+  <button data-view="list"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>רשימה <span id="tabCount"></span></button>
+</nav>
+
+<!-- Add / edit dialog -->
+<dialog id="dlg" aria-labelledby="dlgTitle">
+  <form id="form" novalidate>
+    <div class="dlg-head"><h2 id="dlgTitle">נקודה חדשה</h2><button type="button" class="x" data-close aria-label="סגירה">✕</button></div>
+    <div class="dlg-body">
+      <div class="f" id="fName"><label for="iName">שם הנקודה <span class="req">*</span></label><input id="iName" maxlength="80" placeholder="לדוגמה: שובר הגלים בהרצליה" autocomplete="off"><div class="msg">יש להזין שם לנקודה</div></div>
+      <div class="g2">
+        <div class="f" id="fTypeF"><label for="iType">סוג דיג <span class="req">*</span></label><select id="iType"></select><div class="msg">יש לבחור סוג דיג</div></div>
+        <div class="f"><label for="iDate">תאריך</label><input id="iDate" type="date"></div>
+      </div>
+      <div class="g2">
+        <div class="f" id="fLat"><label for="iLat">קו רוחב (Latitude) <span class="req">*</span></label><input id="iLat" dir="ltr" inputmode="decimal" placeholder="32.16520"><div class="msg">מספר בין ‎-90 ל־90</div></div>
+        <div class="f" id="fLon"><label for="iLon">קו אורך (Longitude) <span class="req">*</span></label><input id="iLon" dir="ltr" inputmode="decimal" placeholder="34.79230"><div class="msg">מספר בין ‎-180 ל־180</div></div>
+      </div>
+      <div class="coord-tools">
+        <button type="button" class="btn btn-g btn-s" id="btnPick">📍 בחירה על המפה</button>
+        <button type="button" class="btn btn-g btn-s" id="btnHere">🧭 המיקום הנוכחי שלי</button>
+      </div>
+      <div class="f"><label for="iNotes">הערות</label><textarea id="iNotes" maxlength="2000" placeholder="פיתיון, שעות טובות, עומק, מה נתפס…"></textarea></div>
+      <div class="f">
+        <label>תמונה</label>
+        <div class="photo" id="photo">
+          <input type="file" id="iImg" accept="image/*" aria-label="בחירת תמונה">
+          <div id="photoInner">📷 לחצו לבחירת תמונה או גררו לכאן<br><small>התמונה תוקטן אוטומטית לחיסכון במקום</small></div>
+        </div>
+        <button type="button" class="mini danger photo-rm" id="btnRmImg" hidden>הסרת תמונה</button>
+      </div>
+    </div>
+    <div class="dlg-foot">
+      <button type="submit" class="btn btn-p" id="btnSave">שמירה</button>
+      <button type="button" class="btn btn-g" data-close>ביטול</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- Confirm dialog -->
+<dialog id="cdlg" aria-labelledby="cTitle">
+  <div class="confirm-body"><h2 id="cTitle" style="margin:0;font-size:19px">מחיקת נקודה</h2><p id="cText"></p></div>
+  <div class="dlg-foot" style="border:0"><button class="btn btn-d" id="cYes">מחיקה</button><button class="btn btn-g" id="cNo">ביטול</button></div>
+</dialog>
+
+<div class="toasts" id="toasts" aria-live="polite"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+(() => {
+'use strict';
+
+/* ---------- עזר ---------- */
+const $ = s => document.querySelector(s);
+const $$ = s => [...document.querySelectorAll(s)];
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+const today = () => { const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 10); };
+const fmtDate = s => { if (!s) return 'ללא תאריך'; const d = new Date(s + 'T12:00'); return isNaN(d) ? s : d.toLocaleDateString('he-IL', { day: 'numeric', month: 'short', year: 'numeric' }); };
+const fmtCoord = (lat, lon) => `${(+lat).toFixed(5)}, ${(+lon).toFixed(5)}`;
+
+function toast(msg, kind = 'info', ms = 3500) {
+  const icons = { ok: '✅', err: '⚠️', warn: '⚠️', info: 'ℹ️' };
+  const t = document.createElement('div');
+  t.className = 'toast ' + kind; t.setAttribute('role', kind === 'err' ? 'alert' : 'status');
+  t.innerHTML = `<span>${icons[kind] || ''}</span><span>${esc(msg)}</span>`;
+  $('#toasts').appendChild(t);
+  setTimeout(() => { t.classList.add('out'); setTimeout(() => t.remove(), 300); }, ms);
+}
+
+/* ---------- סוגי דיג ---------- */
+const TYPES = [
+  { id: 'shore', label: 'דיג מהחוף', color: '#0a6fb8' },
+  { id: 'boat', label: 'דיג מסירה', color: '#0f9d9a' },
+  { id: 'spin', label: 'ספינינג', color: '#7c3aed' },
+  { id: 'spear', label: 'דיג בצלילה', color: '#d97706' },
+  { id: 'night', label: 'דיג לילה', color: '#475569' },
+  { id: 'fly', label: 'דיג בזבובים', color: '#16a34a' },
+  { id: 'fresh', label: 'אגם / נחל', color: '#0891b2' },
+  { id: 'other', label: 'אחר', color: '#db2777' }
+];
+const typeOf = id => TYPES.find(t => t.id === id) || TYPES[TYPES.length - 1];
+
+/* ---------- אחסון ---------- */
+const KEY = 'fishing_spots_v1';
+const LIMIT = 5 * 1024 * 1024; // הערכה – רוב הדפדפנים מאפשרים כ־5MB
+function loadSpots() {
+  try {
+    const raw = localStorage.getItem(KEY);
+    if (!raw) return [];
+    const arr = JSON.parse(raw);
+    return Array.isArray(arr) ? arr.filter(validSpot) : [];
+  } catch (e) {
+    setTimeout(() => toast('לא ניתן לקרוא את הנתונים השמורים בדפדפן', 'err'), 300);
+    return [];
+  }
+}
+function validSpot(s) {
+  return s && typeof s === 'object' && s.id && typeof s.name === 'string' &&
+    isFinite(s.lat) && isFinite(s.lon) && Math.abs(s.lat) <= 90 && Math.abs(s.lon) <= 180;
+}
+function persist(list) {
+  try { localStorage.setItem(KEY, JSON.stringify(list)); updateStorage(); return true; }
+  catch (e) {
+    const quota = e && (e.name === 'QuotaExceededError' || e.code === 22 || e.code === 1014);
+    toast(quota ? 'אין מספיק מקום באחסון הדפדפן. נסו תמונה קטנה יותר או מחקו נקודות ישנות.' : 'השמירה נכשלה – ייתכן שהדפדפן חוסם אחסון מקומי (למשל בגלישה בסתר).', 'err', 6000);
+    return false;
+  }
+}
+function updateStorage() {
+  let size = 0;
+  try { size = (localStorage.getItem(KEY) || '').length * 2; } catch (e) {}
+  const pct = Math.min(100, size / LIMIT * 100);
+  $('#stBar').style.width = pct + '%';
+  $('#stBar').style.background = pct > 85 ? 'var(--err)' : pct > 60 ? 'var(--warn)' : 'var(--accent)';
+  $('#stTxt').textContent = size < 1024 * 1024 ? Math.max(0, Math.round(size / 1024)) + ' KB' : (size / 1048576).toFixed(1) + ' MB';
+}
+
+/* ---------- מצב ---------- */
+const state = { spots: loadSpots(), q: '', type: 'all', sort: 'date', editId: null, img: null, pick: false, sel: null };
+
+/* ---------- מפה ---------- */
+if (!window.L) {
+  $('#map').innerHTML = '<div style="height:100%;display:grid;place-items:center;padding:24px;text-align:center;color:var(--muted)" dir="rtl">לא ניתן לטעון את המפה. בדקו את החיבור לאינטרנט ורעננו את הדף.</div>';
+}
+const map = window.L ? L.map('map', { zoomControl: true, worldCopyJump: true }).setView([32.08, 34.78], 9) : null;
+let tileErrors = 0, tileLoaded = false, fallbackOn = false;
+if (map) {
+  const osm = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>'
+  }).addTo(map);
+  osm.on('tileload', () => { tileLoaded = true; });
+  // גיבוי: אם אריחי OSM נחסמים (למשל כשפותחים את הקובץ ישירות מהמחשב) – עוברים למפת גיבוי
+  osm.on('tileerror', () => {
+    if (++tileErrors >= 4 && !tileLoaded && !fallbackOn) {
+      fallbackOn = true; map.removeLayer(osm);
+      L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', { maxZoom: 19, attribution: 'Tiles &copy; Esri' }).addTo(map);
+    }
+  });
+  L.control.scale({ imperial: false }).addTo(map);
+}
+const layer = map ? L.layerGroup().addTo(map) : null;
+const markers = new Map();
+let draft = null, meMarker = null;
+
+function pinIcon(color, cls = 'pin') {
+  return L.divIcon({
+    className: '', iconSize: [34, 44], iconAnchor: [17, 43], popupAnchor: [0, -38],
+    html: `<svg class="${cls}" width="34" height="44" viewBox="0 0 34 44"><path d="M17 43s15-14.5 15-26A15 15 0 0 0 2 17c0 11.5 15 26 15 26z" fill="${color}" stroke="#fff" stroke-width="2.5"/><path d="M9 17c2.6-3.6 8.2-3.6 11 0-2.8 3.6-8.4 3.6-11 0z" fill="#fff"/><path d="M20 17l4.5-3v6z" fill="#fff"/></svg>`
+  });
+}
+function popupHTML(s) {
+  const t = typeOf(s.type);
+  return `<div class="pop"><h4>${esc(s.name)}</h4>
+    <span class="tag" style="background:${t.color}">${t.label}</span>
+    <div class="meta" style="margin-top:6px"><span>📅 ${fmtDate(s.date)}</span><span dir="ltr">${fmtCoord(s.lat, s.lon)}</span></div>
+    ${s.image ? `<img src="${s.image}" alt="${esc(s.name)}">` : ''}
+    ${s.notes ? `<p>${esc(s.notes)}</p>` : ''}
+    <div class="spot-actions">
+      <button class="mini" data-act="edit" data-id="${s.id}">✏️ עריכה</button>
+      <button class="mini danger" data-act="del" data-id="${s.id}">🗑️ מחיקה</button>
+      <a class="mini" href="https://www.google.com/maps/dir/?api=1&destination=${s.lat},${s.lon}" target="_blank" rel="noopener">🧭 ניווט</a>
+      <button class="mini" data-act="copy" data-id="${s.id}">📋 העתקה</button>
+    </div></div>`;
+}
+
+/* ---------- סינון ותצוגה ---------- */
+function filtered() {
+  const q = state.q.trim().toLowerCase();
+  let arr = state.spots.filter(s =>
+    (state.type === 'all' || s.type === state.type) &&
+    (!q || s.name.toLowerCase().includes(q) || (s.notes || '').toLowerCase().includes(q) || typeOf(s.type).label.includes(q)));
+  if (state.sort === 'name') arr.sort((a, b) => a.name.localeCompare(b.name, 'he'));
+  else if (state.sort === 'created') arr.sort((a, b) => (b.created || 0) - (a.created || 0));
+  else arr.sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.created || 0) - (a.created || 0));
+  return arr;
+}
+function render() {
+  const arr = filtered();
+  // רשימה
+  const total = state.spots.length;
+  $('#count').textContent = total === 0 ? 'אין עדיין נקודות' : arr.length === total ? `${total} נקודות` : `מוצגות ${arr.length} מתוך ${total} נקודות`;
+  $('#tabCount').textContent = total ? `(${total})` : '';
+  if (!arr.length) {
+    $('#list').innerHTML = total === 0
+      ? `<div class="empty"><svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 12c3-5 10-5 14 0-4 5-11 5-14 0z"/><path d="M17 12l4-3v6z"/></svg><b>עוד לא שמרתם נקודות</b>לחצו על המפה או על "נקודה חדשה" כדי להוסיף את המקום הראשון שלכם.</div>`
+      : `<div class="empty"><b>לא נמצאו תוצאות</b>נסו מילת חיפוש אחרת או בטלו את הסינון.<br><button class="mini" style="margin-top:10px" id="clearF">ניקוי סינון</button></div>`;
+  } else {
+    $('#list').innerHTML = arr.map(s => {
+      const t = typeOf(s.type);
+      return `<div class="spot${state.sel === s.id ? ' sel' : ''}" data-id="${s.id}" role="button" tabindex="0" aria-label="${esc(s.name)}">
+        ${s.image ? `<img class="thumb" src="${s.image}" alt="" loading="lazy">` : `<div class="thumb"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="${t.color}" stroke-width="2"><path d="M3 12c3-5 10-5 14 0-4 5-11 5-14 0z"/><path d="M17 12l4-3v6z"/></svg></div>`}
+        <div style="min-width:0">
+          <h3>${esc(s.name)}</h3>
+          <div class="meta"><span class="tag" style="background:${t.color}">${t.label}</span><span>📅 ${fmtDate(s.date)}</span></div>
+          ${s.notes ? `<div class="notes">${esc(s.notes)}</div>` : ''}
+          <div class="spot-actions"><button class="mini" data-act="edit" data-id="${s.id}">עריכה</button><button class="mini danger" data-act="del" data-id="${s.id}">מחיקה</button></div>
+        </div></div>`;
+    }).join('');
+  }
+  // מפה
+  if (!map) return;
+  layer.clearLayers(); markers.clear();
+  arr.forEach(s => {
+    const m = L.marker([s.lat, s.lon], { icon: pinIcon(typeOf(s.type).color), title: s.name, riseOnHover: true })
+      .bindPopup(() => popupHTML(s), { maxWidth: 280 })
+      .on('click', () => select(s.id, false));
+    m.addTo(layer); markers.set(s.id, m);
+  });
+}
+function renderFilters() {
+  const counts = {}; state.spots.forEach(s => { counts[s.type] = (counts[s.type] || 0) + 1; });
+  $('#fType').innerHTML = `<option value="all">כל סוגי הדיג</option>` + TYPES.map(t => `<option value="${t.id}">${t.label}${counts[t.id] ? ` (${counts[t.id]})` : ''}</option>`).join('');
+  $('#fType').value = state.type;
+  $('#chips').innerHTML = `<button class="chip${state.type === 'all' ? ' on' : ''}" data-t="all">הכל</button>` +
+    TYPES.filter(t => counts[t.id]).map(t => `<button class="chip${state.type === t.id ? ' on' : ''}" data-t="${t.id}"><i style="background:${t.color}"></i>${t.label} ${counts[t.id]}</button>`).join('');
+}
+function refresh() { renderFilters(); render(); }
+
+function select(id, fly = true) {
+  state.sel = id;
+  $$('.spot').forEach(el => el.classList.toggle('sel', el.dataset.id === id));
+  const m = markers.get(id), s = state.spots.find(x => x.id === id);
+  if (!map || !s) return;
+  if (isMobile()) setView('map');
+  if (fly) { map.flyTo([s.lat, s.lon], Math.max(map.getZoom(), 14), { duration: .8 }); if (m) setTimeout(() => m.openPopup(), 850); }
+}
+function fitAll(quiet) {
+  if (!map) return;
+  const pts = filtered().map(s => [s.lat, s.lon]);
+  if (!pts.length) { if (!quiet) toast('אין נקודות להצגה', 'warn'); return; }
+  if (pts.length === 1) map.setView(pts[0], 13); else map.fitBounds(pts, { padding: [50, 50], maxZoom: 14 });
+  if (isMobile()) setView('map');
+}
+
+/* ---------- טופס ---------- */
+const dlg = $('#dlg');
+TYPES.forEach(t => $('#iType').insertAdjacentHTML('beforeend', `<option value="${t.id}">${t.label}</option>`));
+$('#iType').insertAdjacentHTML('afterbegin', '<option value="" disabled>בחרו סוג דיג…</option>');
+
+function openForm(spot, coords) {
+  state.editId = spot ? spot.id : null;
+  state.img = spot ? spot.image || null : null;
+  $('#dlgTitle').textContent = spot ? 'עריכת נקודה' : 'נקודה חדשה';
+  $('#btnSave').textContent = spot ? 'שמירת שינויים' : 'הוספת נקודה';
+  $('#iName').value = spot ? spot.name : '';
+  $('#iType').value = spot ? spot.type : ($('#iType').dataset.last || '');
+  $('#iDate').value = spot ? (spot.date || '') : today();
+  $('#iNotes').value = spot ? (spot.notes || '') : '';
+  const c = spot ? { lat: spot.lat, lon: spot.lon } : coords;
+  $('#iLat').value = c ? (+c.lat).toFixed(6) : '';
+  $('#iLon').value = c ? (+c.lon).toFixed(6) : '';
+  $$('.f.bad').forEach(f => f.classList.remove('bad'));
+  showImg();
+  updateDraft();
+  if (!dlg.open) dlg.showModal();
+  setTimeout(() => (c ? $('#iName') : $('#iLat')).focus(), 50);
+}
+function closeForm() { if (dlg.open) dlg.close(); }
+dlg.addEventListener('close', () => { if (!state.pick) { clearDraft(); state.editId = null; } });
+$$('[data-close]').forEach(b => b.addEventListener('click', closeForm));
+
+function parseNum(v) { v = String(v).trim().replace(',', '.'); return v === '' || isNaN(v) ? NaN : parseFloat(v); }
+function readCoords() { return { lat: parseNum($('#iLat').value), lon: parseNum($('#iLon').value) }; }
+function updateDraft() {
+  if (!map) return;
+  const { lat, lon } = readCoords();
+  const okC = isFinite(lat) && isFinite(lon) && Math.abs(lat) <= 90 && Math.abs(lon) <= 180;
+  if (!okC) { clearDraft(); return; }
+  const color = $('#iType').value ? typeOf($('#iType').value).color : '#94a3b8';
+  if (!draft) draft = L.marker([lat, lon], { icon: pinIcon(color, 'pin draft-pin'), zIndexOffset: 1000, interactive: false }).addTo(map);
+  else { draft.setLatLng([lat, lon]); draft.setIcon(pinIcon(color, 'pin draft-pin')); }
+}
+function clearDraft() { if (draft) { map.removeLayer(draft); draft = null; } }
+['#iLat', '#iLon'].forEach(s => $(s).addEventListener('input', () => { $(s).closest('.f').classList.remove('bad'); updateDraft(); }));
+$('#iType').addEventListener('change', () => { $('#fTypeF').classList.remove('bad'); updateDraft(); });
+$('#iName').addEventListener('input', () => $('#fName').classList.remove('bad'));
+$('#iLat').addEventListener('paste', e => {
+  // הדבקה של "lat, lon" בשדה אחד – מפוצלת אוטומטית
+  const txt = (e.clipboardData || window.clipboardData).getData('text');
+  const m = txt.match(/(-?\d+(?:\.\d+)?)\s*[,;\s]\s*(-?\d+(?:\.\d+)?)/);
+  if (m) { e.preventDefault(); $('#iLat').value = m[1]; $('#iLon').value = m[2]; updateDraft(); toast('הקואורדינטות פוצלו לשני השדות', 'ok', 2000); }
+});
+
+function validate() {
+  let ok = true;
+  const name = $('#iName').value.trim(), type = $('#iType').value, { lat, lon } = readCoords();
+  const mark = (id, bad) => { $(id).classList.toggle('bad', bad); if (bad) ok = false; };
+  mark('#fName', !name);
+  mark('#fTypeF', !type);
+  mark('#fLat', !(isFinite(lat) && lat >= -90 && lat <= 90));
+  mark('#fLon', !(isFinite(lon) && lon >= -180 && lon <= 180));
+  if (!ok) { const first = $('.f.bad input, .f.bad select'); if (first) first.focus(); toast('יש לתקן את השדות המסומנים', 'err'); }
+  return ok;
+}
+$('#form').addEventListener('submit', e => {
+  e.preventDefault();
+  if (!validate()) return;
+  const { lat, lon } = readCoords();
+  const data = { name: $('#iName').value.trim(), type: $('#iType').value, lat: +lat.toFixed(6), lon: +lon.toFixed(6), date: $('#iDate').value, notes: $('#iNotes').value.trim(), image: state.img };
+  let next, id;
+  if (state.editId) {
+    id = state.editId;
+    next = state.spots.map(s => s.id === id ? { ...s, ...data, updated: Date.now() } : s);
+  } else {
+    id = uid();
+    next = [...state.spots, { id, ...data, created: Date.now() }];
+  }
+  if (!persist(next)) return;
+  const wasEdit = !!state.editId;
+  state.spots = next;
+  $('#iType').dataset.last = data.type;
+  // אם הנקודה החדשה מוסתרת על ידי הסינון – מבטלים את הסינון כדי שהמשתמש יראה אותה
+  if (!filtered().some(s => s.id === id)) { state.type = 'all'; state.q = ''; $('#q').value = ''; }
+  closeForm(); clearDraft();
+  refresh(); select(id);
+  toast(wasEdit ? 'השינויים נשמרו' : `הנקודה "${data.name}" נוספה בהצלחה`, 'ok');
+});
+
+/* תמונה */
+async function compress(file) {
+  if (!file.type.startsWith('image/')) throw new Error('type');
+  const url = URL.createObjectURL(file);
+  try {
+    const img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = url; });
+    const max = 1024, k = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight));
+    const c = document.createElement('canvas');
+    c.width = Math.round(img.naturalWidth * k); c.height = Math.round(img.naturalHeight * k);
+    c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+    return c.toDataURL('image/jpeg', 0.72);
+  } finally { URL.revokeObjectURL(url); }
+}
+async function takeFile(file) {
+  if (!file) return;
+  if (file.size > 25 * 1024 * 1024) { toast('הקובץ גדול מדי (מעל 25MB)', 'err'); return; }
+  $('#photoInner').textContent = 'מעבד תמונה…';
+  try { state.img = await compress(file); showImg(); toast('התמונה נוספה', 'ok', 1800); }
+  catch (e) { showImg(); toast('לא ניתן לקרוא את הקובץ. בחרו קובץ תמונה (JPG, PNG…)', 'err'); }
+}
+function showImg() {
+  $('#photoInner').innerHTML = state.img ? `<img src="${state.img}" alt="תצוגה מקדימה">` : '📷 לחצו לבחירת תמונה או גררו לכאן<br><small>התמונה תוקטן אוטומטית לחיסכון במקום</small>';
+  $('#btnRmImg').hidden = !state.img;
+  $('#iImg').value = '';
+}
+$('#iImg').addEventListener('change', e => takeFile(e.target.files[0]));
+$('#btnRmImg').addEventListener('click', () => { state.img = null; showImg(); });
+['dragenter', 'dragover'].forEach(ev => $('#photo').addEventListener(ev, e => { e.preventDefault(); $('#photo').classList.add('drag'); }));
+['dragleave', 'drop'].forEach(ev => $('#photo').addEventListener(ev, e => { e.preventDefault(); $('#photo').classList.remove('drag'); }));
+$('#photo').addEventListener('drop', e => takeFile(e.dataTransfer.files[0]));
+
+/* בחירה על המפה מתוך הטופס */
+let pickSnapshot = null;
+$('#btnPick').addEventListener('click', () => {
+  if (!map) return toast('המפה אינה זמינה', 'err');
+  pickSnapshot = { name: $('#iName').value, type: $('#iType').value, date: $('#iDate').value, notes: $('#iNotes').value, img: state.img, editId: state.editId, title: $('#dlgTitle').textContent, save: $('#btnSave').textContent };
+  state.pick = true; dlg.close();
+  if (isMobile()) setView('map');
+  setHint();
+  toast('לחצו על המפה במקום הרצוי', 'info', 2500);
+});
+function finishPick(lat, lon) {
+  state.pick = false; setHint();
+  const p = pickSnapshot; pickSnapshot = null;
+  state.editId = p.editId; state.img = p.img;
+  $('#iName').value = p.name; $('#iType').value = p.type; $('#iDate').value = p.date; $('#iNotes').value = p.notes;
+  $('#dlgTitle').textContent = p.title; $('#btnSave').textContent = p.save;
+  $('#iLat').value = lat.toFixed(6); $('#iLon').value = lon.toFixed(6);
+  $$('#fLat,#fLon').forEach(f => f.classList.remove('bad'));
+  showImg(); updateDraft(); dlg.showModal();
+}
+function setHint() {
+  const h = $('#hint');
+  h.classList.toggle('pick', state.pick);
+  h.textContent = state.pick ? '📍 לחצו על המפה לבחירת המיקום (Esc לביטול)' : 'לחצו על המפה כדי להוסיף נקודת דיג';
+}
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && state.pick) { state.pick = false; setHint(); const p = pickSnapshot; pickSnapshot = null; if (p) { state.editId = p.editId; state.img = p.img; $('#iName').value = p.name; $('#iType').value = p.type; $('#iDate').value = p.date; $('#iNotes').value = p.notes; $('#dlgTitle').textContent = p.title; $('#btnSave').textContent = p.save; showImg(); dlg.showModal(); } }
+});
+
+if (map) map.on('click', e => {
+  const lat = e.latlng.lat, lon = L.Util.wrapNum(e.latlng.lng, [-180, 180], true);
+  if (state.pick) finishPick(lat, lon);
+  else openForm(null, { lat, lon });
+});
+
+/* מיקום נוכחי */
+function geolocate(cb) {
+  if (!navigator.geolocation) return toast('הדפדפן אינו תומך באיתור מיקום', 'err');
+  toast('מאתר את המיקום שלך…', 'info', 2000);
+  navigator.geolocation.getCurrentPosition(
+    p => cb(p.coords.latitude, p.coords.longitude, p.coords.accuracy),
+    err => toast(err.code === 1 ? 'אין הרשאה לגשת למיקום. אפשרו גישה בהגדרות הדפדפן.' : 'לא הצלחנו לאתר את המיקום. נסו שוב.', 'err', 5000),
+    { enableHighAccuracy: true, timeout: 12000 });
+}
+$('#btnHere').addEventListener('click', () => geolocate((lat, lon) => { $('#iLat').value = lat.toFixed(6); $('#iLon').value = lon.toFixed(6); $$('#fLat,#fLon').forEach(f => f.classList.remove('bad')); updateDraft(); toast('המיקום הוזן', 'ok', 2000); }));
+$('#btnLocate').addEventListener('click', () => geolocate((lat, lon, acc) => {
+  if (!map) return;
+  if (isMobile()) setView('map');
+  if (meMarker) map.removeLayer(meMarker);
+  meMarker = L.layerGroup([
+    L.circle([lat, lon], { radius: Math.min(acc, 2000), color: '#0a6fb8', weight: 1, fillOpacity: .12 }),
+    L.circleMarker([lat, lon], { radius: 8, color: '#fff', weight: 3, fillColor: '#0a6fb8', fillOpacity: 1 }).bindTooltip('אתם כאן', { direction: 'top' })
+  ]).addTo(map);
+  map.flyTo([lat, lon], 14);
+}));
+
+/* ---------- מחיקה ---------- */
+const cdlg = $('#cdlg'); let delId = null;
+function askDelete(id) {
+  const s = state.spots.find(x => x.id === id); if (!s) return;
+  delId = id; $('#cText').textContent = `האם למחוק את "${s.name}"? לא ניתן לבטל פעולה זו.`;
+  cdlg.showModal(); $('#cNo').focus();
+}
+$('#cNo').addEventListener('click', () => cdlg.close());
+$('#cYes').addEventListener('click', () => {
+  const s = state.spots.find(x => x.id === delId);
+  const next = state.spots.filter(x => x.id !== delId);
+  cdlg.close();
+  if (!s || !persist(next)) return;
+  state.spots = next; if (state.sel === delId) state.sel = null;
+  if (map) map.closePopup();
+  refresh(); toast(`הנקודה "${s.name}" נמחקה`, 'ok');
+});
+
+/* ---------- אירועים כלליים ---------- */
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-act]');
+  if (b) {
+    e.stopPropagation();
+    const id = b.dataset.id, s = state.spots.find(x => x.id === id);
+    if (!s) return;
+    if (b.dataset.act === 'edit') { if (map) map.closePopup(); openForm(s); }
+    else if (b.dataset.act === 'del') askDelete(id);
+    else if (b.dataset.act === 'copy') {
+      const txt = `${s.lat}, ${s.lon}`;
+      (navigator.clipboard ? navigator.clipboard.writeText(txt) : Promise.reject()).then(() => toast('הקואורדינטות הועתקו', 'ok', 2000), () => toast(txt, 'info', 6000));
+    }
+    return;
+  }
+  const card = e.target.closest('.spot');
+  if (card) select(card.dataset.id);
+  if (e.target.id === 'clearF') { state.q = ''; state.type = 'all'; $('#q').value = ''; refresh(); }
+});
+$('#list').addEventListener('keydown', e => { const c = e.target.closest('.spot'); if (c && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); select(c.dataset.id); } });
+let qt; $('#q').addEventListener('input', e => { clearTimeout(qt); qt = setTimeout(() => { state.q = e.target.value; render(); }, 150); });
+$('#fType').addEventListener('change', e => { state.type = e.target.value; refresh(); fitAll(true); });
+$('#chips').addEventListener('click', e => { const c = e.target.closest('.chip'); if (!c) return; state.type = c.dataset.t; refresh(); fitAll(true); });
+$('#fSort').addEventListener('change', e => { state.sort = e.target.value; render(); });
+$('#btnFit').addEventListener('click', () => fitAll());
+$('#fab').addEventListener('click', () => openForm(null, map ? (() => { const c = map.getCenter(); return { lat: c.lat, lon: L.Util.wrapNum(c.lng, [-180, 180], true) }; })() : null));
+$('#btnCoords').addEventListener('click', () => openForm(null, null));
+
+/* מובייל */
+const isMobile = () => matchMedia('(max-width:860px)').matches;
+function setView(v) {
+  $('#app').classList.toggle('show-list', v === 'list');
+  $$('#tabbar button').forEach(b => b.classList.toggle('on', b.dataset.view === v));
+  if (v === 'map' && map) setTimeout(() => map.invalidateSize(), 50);
+}
+$('#tabbar').addEventListener('click', e => { const b = e.target.closest('button'); if (b) setView(b.dataset.view); });
+addEventListener('resize', () => { if (map) map.invalidateSize(); if (!isMobile()) $('#app').classList.remove('show-list'); });
+
+/* גיבוי ושחזור */
+$('#btnExport').addEventListener('click', () => {
+  if (!state.spots.length) return toast('אין נקודות לגיבוי', 'warn');
+  const blob = new Blob([JSON.stringify({ app: 'fishing-spots', version: 1, exported: new Date().toISOString(), spots: state.spots }, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `fishing-spots-${today()}.json`;
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  toast(`גובו ${state.spots.length} נקודות לקובץ`, 'ok');
+});
+$('#btnImport').addEventListener('click', () => $('#importFile').click());
+$('#importFile').addEventListener('change', async e => {
+  const f = e.target.files[0]; e.target.value = ''; if (!f) return;
+  try {
+    const j = JSON.parse(await f.text());
+    const list = (Array.isArray(j) ? j : j.spots || []).filter(validSpot);
+    if (!list.length) return toast('לא נמצאו נקודות תקינות בקובץ', 'err');
+    const byId = new Map(state.spots.map(s => [s.id, s]));
+    let added = 0, updated = 0;
+    list.forEach(s => { if (byId.has(s.id)) updated++; else added++; byId.set(s.id, { ...s, type: typeOf(s.type).id }); });
+    const next = [...byId.values()];
+    if (!persist(next)) return;
+    state.spots = next; refresh(); fitAll(true);
+    toast(`שוחזרו ${added} נקודות חדשות${updated ? ` ועודכנו ${updated}` : ''}`, 'ok');
+  } catch (err) { toast('הקובץ אינו קובץ גיבוי תקין', 'err'); }
+});
+
+/* ערכת נושא */
+try { const th = localStorage.getItem('fishing_theme'); if (th) document.documentElement.dataset.theme = th; } catch (e) {}
+$('#btnTheme').addEventListener('click', () => {
+  const cur = document.documentElement.dataset.theme || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+  const next = cur === 'dark' ? 'light' : 'dark';
+  document.documentElement.dataset.theme = next;
+  try { localStorage.setItem('fishing_theme', next); } catch (e) {}
+});
+
+/* בדיקה שהאחסון זמין */
+try { localStorage.setItem('__t', '1'); localStorage.removeItem('__t'); }
+catch (e) { setTimeout(() => toast('האחסון המקומי חסום בדפדפן זה – הנקודות לא יישמרו אחרי סגירה', 'warn', 7000), 400); }
+
+/* ---------- הפעלה ---------- */
+refresh(); updateStorage();
+if (state.spots.length) fitAll(true);
+else setTimeout(() => toast('ברוכים הבאים! לחצו על המפה כדי לשמור את נקודת הדיג הראשונה שלכם', 'info', 5000), 600);
+})();
+</script>
+</body>
+</html>
